@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Family Column Game</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#f7f7fb;--card:#fff;--text:#171923;--muted:#666b78;--line:#dedfe6;--accent:#4f46e5;--accent2:#eef2ff;--danger:#b42318;--good:#087443}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:720px;margin:auto;padding:18px 14px 40px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 2px 8px #00000008}
+h1{font-size:1.55rem;margin:0 0 4px}.sub{color:var(--muted);font-size:.92rem}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 180px}
+button,input{font:inherit}button{min-height:46px;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff;font-weight:700;cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.5;cursor:not-allowed}
+input{width:100%;min-height:46px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;background:#fff}
+label{display:block;font-weight:650;margin:10px 0 6px}.hidden{display:none!important}.status{padding:10px 12px;border-radius:12px;background:var(--accent2);margin:10px 0;font-size:.9rem}.error{background:#fff1f0;color:var(--danger)}.success{background:#ecfdf3;color:var(--good)}
+.code{font-size:2rem;letter-spacing:.18em;font-weight:900;text-align:center;padding:12px;background:#f3f4f6;border-radius:14px}
+.players{display:grid;gap:8px;margin-top:10px}.player{display:flex;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.category{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}.category h3{margin:0 0 7px;font-size:1rem}
+.answers{display:grid;grid-template-columns:1fr 110px;gap:7px;align-items:center}.answers input{min-height:44px}.score{font-weight:800;text-align:right}.tablewrap{overflow-x:auto}.scoretable{width:100%;border-collapse:collapse;min-width:560px}.scoretable th,.scoretable td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left}.scoretable th:last-child,.scoretable td:last-child{text-align:right}.rank{font-weight:900}
+.small{font-size:.82rem;color:var(--muted)}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#f1f1f5;font-size:.78rem;font-weight:700}
+footer{color:var(--muted);font-size:.78rem;text-align:center;margin-top:20px}
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>🎲 Family Column Game</h1>
+    <div class="sub">Private answers • automatic scoring • family leaderboard</div>
+  </div>
+
+  <section id="home" class="card">
+    <h2>Start or join</h2>
+    <p class="small">The host keeps the room open while everyone plays. Players do not send their answers until the host reveals the round.</p>
+    <div class="row">
+      <button class="primary" id="hostBtn">Create a game</button>
+      <button id="joinBtn">Join a game</button>
+    </div>
+  </section>
+
+  <section id="setup" class="card hidden">
+    <h2 id="setupTitle">Join game</h2>
+    <div id="setupHelp" class="sub"></div>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="24" placeholder="e.g. Mum">
+    <div id="codeWrap">
+      <label for="code">Game code</label>
+      <input id="code" maxlength="6" inputmode="text" autocomplete="off" placeholder="ABC123" style="text-transform:uppercase">
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="setupGo">Continue</button>
+      <button id="backBtn">Back</button>
+    </div>
+    <div id="setupStatus"></div>
+  </section>
+
+  <section id="hostLobby" class="card hidden">
+    <h2>Game lobby</h2>
+    <div class="small">Share this link or code with your family:</div>
+    <div class="code" id="hostCode">------</div>
+    <input id="shareLink" readonly style="margin-top:8px">
+    <div class="row" style="margin-top:8px">
+      <button id="copyLink">Copy invite link</button>
+      <button id="startRound" class="primary">Start round</button>
+    </div>
+    <div class="players" id="hostPlayers"></div>
+    <div class="status">Keep this page open as the host. Everyone joins from their own phone.</div>
+  </section>
+
+  <section id="playerLobby" class="card hidden">
+    <h2>Waiting for host</h2>
+    <div class="status success">You're in the game.</div>
+    <div class="players" id="playerPlayers"></div>
+    <p class="small">Keep this page open. The round will appear when the host starts it.</p>
+  </section>
+
+  <section id="round" class="card hidden">
+    <h2 id="roundTitle">Round</h2>
+    <div class="status" id="roundStatus">Your answers are private on this phone.</div>
+    <div id="categories"></div>
+    <button class="primary" id="finishBtn">I'm finished</button>
+    <div class="small" style="margin-top:8px">After finishing, your answers are locked. Nobody else receives them until the host reveals the round.</div>
+  </section>
+
+  <section id="hostControl" class="card hidden">
+    <h2>Host controls</h2>
+    <div class="status" id="readyStatus"></div>
+    <button class="primary" id="revealBtn" disabled>Reveal answers & score</button>
+    <div class="small" style="margin-top:8px">Reveal sends the players' locked answers to the host and calculates 10 points for a unique answer, 5 for a duplicate, and 0 for blank.</div>
+  </section>
+
+  <section id="results" class="card hidden">
+    <h2>🏆 Results</h2>
+    <div class="tablewrap"><div id="resultsTable"></div></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="nextRound">Next round</button>
+      <button id="newGame">New game</button>
+    </div>
+  </section>
+
+  <footer>Column Game • Works on phones over HTTPS. The host page must stay open during the game.</footer>
+</main>
+
+<script>
+(function(){
+"use strict";
+const CATS=["Animals","Countries","Brands","Celebrities","Fruit & Veg"];
+const $=id=>document.getElementById(id);
+const show=id=>$(id).classList.remove("hidden"), hide=id=>$(id).classList.add("hidden");
+let mode=null, peer=null, hostPeerId=null, roomCode=null, myName="", players={}, conns={}, round=0, locked=false, currentAnswers={}, received={};
+
+function status(el,msg,cls=""){el.innerHTML='<div class="status '+cls+'">'+msg+'</div>'}
+function clean(s){return String(s??"").replace(/[<>&"]/g,"")}
+function makeCode(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function makePeerId(code){return "column-game-"+code+"-"+Math.random().toString(36).slice(2,8)}
+function hideAll(){["home","setup","hostLobby","playerLobby","round","hostControl","results"].forEach(hide)}
+
+function renderPlayers(target){
+ const names=Object.values(players);
+ $(target).innerHTML=names.length?names.map(p=>`<div class="player"><span>${clean(p.name)}</span><span class="pill">${p.ready?"Ready":"Waiting"}</span></div>`).join(""):"<div class='small'>No players yet.</div>";
+}
+function setPlayerStatus(){renderPlayers("playerPlayers")}
+
+function setupPeerHost(){
+ return new Promise((resolve,reject)=>{
+   peer=new Peer(makePeerId(roomCode),{debug:0});
+   peer.on("open",id=>{hostPeerId=id;resolve(id)});
+   peer.on("connection",conn=>{
+     conns[conn.peer]=conn;
+     conn.on("open",()=>{conn.send({type:"welcome",room:roomCode,players:Object.values(players),round,locked,mode:"host"});});
+     conn.on("data",msg=>hostMessage(conn,msg));
+     conn.on("close",()=>{delete conns[conn.peer]});
+   });
+   peer.on("error",reject);
+ });
+}
+function setupPeerPlayer(){
+ return new Promise((resolve,reject)=>{
+   peer=new Peer(undefined,{debug:0});
+   peer.on("open",()=>resolve());
+   peer.on("error",reject);
+ });
+}
+function connectToHost(){
+ const conn=peer.connect(hostPeerId,{reliable:true});
+ conn.on("open",()=>{conns.host=conn;conn.send({type:"join",name:myName});});
+ conn.on("data",msg=>playerMessage(conn,msg));
+ conn.on("close",()=>status($("roundStatus"),"Connection to the host was lost. Ask the host to keep the game open.","error"));
+ return conn;
+}
+
+function hostMessage(conn,msg){
+ if(!msg||!msg.type)return;
+ if(msg.type==="join"){
+   const id=conn.peer;
+   players[id]={id,name:String(msg.name||"Player").slice(0,24),ready:false};
+   broadcast({type:"players",players:Object.values(players)});
+   renderPlayers("hostPlayers");
+ }
+ if(msg.type==="ready"){
+   if(players[conn.peer])players[conn.peer].ready=true;
+   broadcast({type:"players",players:Object.values(players)});
+   updateReady();
+ }
+ if(msg.type==="answers"){
+   received[conn.peer]=Array.isArray(msg.answers)?msg.answers:[];
+   if(Object.keys(received).length>=Object.keys(players).filter(id=>id!=="host").length) $("revealBtn").disabled=false;
+ }
+}
+function broadcast(msg){Object.values(conns).forEach(c=>{try{c.send(msg)}catch(e){}})}
+function hostSendPlayer(id,msg){try{conns[id]?.send(msg)}catch(e){}}
+
+function playerMessage(conn,msg){
+ if(!msg||!msg.type)return;
+ if(msg.type==="welcome"){players={};(msg.players||[]).forEach(p=>players[p.id]=p);setPlayerStatus(); if(msg.round>0) startPlayerRound(msg.round); else {hideAll();show("playerLobby");}}
+ if(msg.type==="players"){players={};(msg.players||[]).forEach(p=>players[p.id]=p); if(!$("playerLobby").classList.contains("hidden"))setPlayerStatus();}
+ if(msg.type==="start"){startPlayerRound(msg.round)}
+ if(msg.type==="reveal"){showResults(msg.results); locked=true; status($("roundStatus"),"Round revealed. Your answers are now visible.","success")}
+}
+
+function startPlayerRound(r){
+ round=r; locked=false; currentAnswers={}; hideAll();show("round");
+ $("roundTitle").textContent="Round "+round;
+ $("categories").innerHTML=CATS.map((c,i)=>`<div class="category"><h3>${i+1}. ${c}</h3><input maxlength="60" data-cat="${i}" placeholder="Your answer"></div>`).join("");
+ $("finishBtn").disabled=false;
+ status($("roundStatus"),"Your answers are private on this phone. Don't show your screen to anyone.");
+}
+function startHostRound(){
+ round++;received={};locked=false;
+ Object.values(players).forEach(p=>p.ready=false);
+ hideAll();show("round");show("hostControl");
+ $("roundTitle").textContent="Round "+round+" — Host";
+ $("categories").innerHTML=CATS.map((c,i)=>`<div class="category"><h3>${i+1}. ${c}</h3><input maxlength="60" data-cat="${i}" placeholder="Your answer"></div>`).join("");
+ $("finishBtn").textContent="I'm finished";
+ $("finishBtn").disabled=false;
+ status($("roundStatus"),"Your answers are private on this phone.");
+ $("readyStatus").textContent="Waiting for everyone to finish...";
+ $("revealBtn").disabled=true;
+ broadcast({type:"start",round});
+}
+
+function collectAnswers(){
+ return CATS.map((_,i)=>{
+   const el=$(`categories`).querySelector(`input[data-cat="${i}"]`);
+   return el?el.value.trim():"";
+ });
+}
+function normalize(s){return s.trim().toLowerCase().replace(/[\s.,'’_-]+/g," ")}
+function scoreAll(all){
+ const names=Object.keys(all);
+ const scores={};names.forEach(id=>scores[id]=Array(CATS.length).fill(0));
+ for(let c=0;c<CATS.length;c++){
+   const counts={};
+   names.forEach(id=>{const a=normalize(all[id][c]||"");if(a)counts[a]=(counts[a]||0)+1});
+   names.forEach(id=>{const a=normalize(all[id][c]||"");scores[id][c]=a?(counts[a]===1?10:5):0});
+ }
+ return scores;
+}
+function showResults(payload){
+ hideAll();show("results");
+ const names=Object.keys(payload.answers);
+ const rows=names.map(id=>({id,name:payload.names[id]||"Player",answers:payload.answers[id],scores:payload.scores[id],total:payload.scores[id].reduce((a,b)=>a+b,0)})).sort((a,b)=>b.total-a.total);
+ let h="<table class='scoretable'><thead><tr><th>Player</th>"+CATS.map(c=>`<th>${c}</th>`).join("")+"<th>Total</th></tr></thead><tbody>";
+ rows.forEach((r,i)=>{h+=`<tr><td class='rank'>${i+1}. ${clean(r.name)}</td>`+CATS.map((_,c)=>`<td>${clean(r.answers[c]||"—")}<br><span class='small'>${r.scores[c]} pts</span></td>`).join("")+`<td class='rank'>${r.total}</td></tr>`});
+ h+="</tbody></table>";
+ $("resultsTable").innerHTML=h;
+}
+
+function updateReady(){
+ const total=Object.keys(players).filter(id=>id!=="host").length;
+ const ready=Object.keys(players).filter(id=>id!=="host"&&players[id].ready).length;
+ $("readyStatus").textContent=total?`${ready} of ${total} players finished.`:"No players have joined yet.";
+ $("revealBtn").disabled=total>0 ? ready<total : true;
+}
+
+$("hostBtn").onclick=async()=>{
+ mode="host";hideAll();show("setup");$("setupTitle").textContent="Create a game";$("setupHelp").textContent="Enter your name. You'll get a shareable invite link.";hide("codeWrap");
+ $("setupGo").onclick=async()=>{
+   myName=$("name").value.trim()||"Host";roomCode=makeCode();players={host:{id:"host",name:myName,ready:false}};
+   try{await setupPeerHost(); $("hostCode").textContent=roomCode; $("shareLink").value=location.href.split("?")[0]+"?join="+encodeURIComponent(roomCode)+"&host="+encodeURIComponent(hostPeerId); hideAll();show("hostLobby");renderPlayers("hostPlayers");}
+   catch(e){status($("setupStatus"),"Could not create the game. Please use an HTTPS site and try again.","error")}
+ };
+};
+$("joinBtn").onclick=()=>{mode="player";hideAll();show("setup");$("setupTitle").textContent="Join a game";$("setupHelp").textContent="Enter your name and the game code.";show("codeWrap");const q=new URLSearchParams(location.search);if(q.get("join"))$("code").value=q.get("join");};
+$("backBtn").onclick=()=>{hideAll();show("home")};
+$("setupGo").addEventListener("click",async()=>{
+ if(mode!=="player")return;
+ myName=$("name").value.trim();roomCode=$("code").value.trim().toUpperCase();
+ const q=new URLSearchParams(location.search);hostPeerId=q.get("host")||"";
+ if(!myName||roomCode.length<4||!hostPeerId){status($("setupStatus"),"Use the invite link from the host, or enter the correct game code/link.","error");return}
+ try{await setupPeerPlayer();connectToHost();players={self:{id:"self",name:myName,ready:false}};hideAll();show("playerLobby");status($("setupStatus"),"");}
+ catch(e){status($("setupStatus"),"Could not connect. Check the invite link and make sure the host still has the game open.","error")}
+});
+$("copyLink").onclick=async()=>{try{await navigator.clipboard.writeText($("shareLink").value);$("copyLink").textContent="Copied ✓";setTimeout(()=>$("copyLink").textContent="Copy invite link",1500)}catch(e){$("shareLink").select()}};
+$("startRound").onclick=()=>{startHostRound()};
+$("finishBtn").onclick=()=>{
+ if(locked)return;
+ currentAnswers=collectAnswers();locked=true;$("finishBtn").disabled=true;
+ if(mode==="host"){players.host.ready=true;received.host=currentAnswers;updateReady();status($("roundStatus"),"You're finished. Waiting for the family.","success");}
+ else {conns.host?.send({type:"ready"});conns.host?.send({type:"answers",answers:currentAnswers});status($("roundStatus"),"Locked ✓ Waiting for the host to reveal.","success")}
+};
+$("revealBtn").onclick=()=>{
+ const all={host:received.host||collectAnswers()}, names={host:myName};
+ Object.keys(players).filter(id=>id!=="host").forEach(id=>{all[id]=received[id]||Array(CATS.length).fill("");names[id]=players[id].name});
+ const scores=scoreAll(all); const payload={answers:all,names,scores};
+ broadcast({type:"reveal",results:payload});showResults(payload);
+};
+$("nextRound").onclick=()=>{
+ if(mode==="host"){startHostRound()}else{hideAll();show("playerLobby");}
+};
+$("newGame").onclick=()=>location.href=location.href.split("?")[0];
+
+(function initFromLink(){
+ const q=new URLSearchParams(location.search);
+ if(q.get("join")&&q.get("host")){$("joinBtn").click();}
+})();
+})();
+</script>
+</body>
+</html>
